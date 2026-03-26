@@ -7,6 +7,14 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
+resource "aws_cloudfront_origin_access_control" "image" {
+  name                              = "${var.project_name}-image-oac"
+  description                       = "OAC for ${aws_s3_bucket.image.bucket}"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
 data "terraform_remote_state" "compute" {
   backend = "local"
 
@@ -29,6 +37,12 @@ resource "aws_cloudfront_distribution" "front" {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
     origin_id                = "s3-frontend-origin"
     origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
+  }
+
+  origin {
+    domain_name              = aws_s3_bucket.image.bucket_regional_domain_name
+    origin_id                = "s3-image-origin"
+    origin_access_control_id = aws_cloudfront_origin_access_control.image.id
   }
 
   # ALB 오리진 (CloudFront -> ALB)
@@ -121,6 +135,38 @@ resource "aws_cloudfront_distribution" "front" {
     }
   }
 
+  ordered_cache_behavior {
+    path_pattern     = "/images/*"
+    target_origin_id = "s3-image-origin"
+
+    allowed_methods  = ["GET", "HEAD"]
+    cached_methods   = ["GET", "HEAD"]
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+    viewer_protocol_policy = "redirect-to-https"
+  }
+
+  ordered_cache_behavior {
+    path_pattern     = "/logs/*"
+    target_origin_id = "s3-image-origin"
+
+    allowed_methods  = ["GET", "HEAD"]
+    cached_methods   = ["GET", "HEAD"]
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+    viewer_protocol_policy = "redirect-to-https"
+  }
+
   # 지역 제한 없음
   restrictions {
     geo_restriction {
@@ -158,6 +204,30 @@ resource "aws_s3_bucket_policy" "frontend_cloudfront" {
         }
         Action   = ["s3:GetObject"]
         Resource = "${aws_s3_bucket.frontend.arn}/*"
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn" = aws_cloudfront_distribution.front.arn
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_s3_bucket_policy" "image_cloudfront" {
+  bucket = aws_s3_bucket.image.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowCloudFrontReadImage"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudfront.amazonaws.com"
+        }
+        Action   = ["s3:GetObject"]
+        Resource = "${aws_s3_bucket.image.arn}/*"
         Condition = {
           StringEquals = {
             "AWS:SourceArn" = aws_cloudfront_distribution.front.arn
