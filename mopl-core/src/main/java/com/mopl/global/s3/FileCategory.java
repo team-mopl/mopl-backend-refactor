@@ -6,11 +6,9 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum FileCategory {
-    CONTENT_THUMBNAIL("contents/thumbnails"),
-    PROFILE_IMAGE("profiles"),
-    CHAT_FILE("chats"),
-    BATCH_LOG("logs/batch"),
-    TEST("test");
+    CONTENT_THUMBNAIL("images/contents/thumbnails"),
+    PROFILE_IMAGE("images/profiles"),
+    BATCH_LOG("logs/batch");
 
     private final String path;
 }
